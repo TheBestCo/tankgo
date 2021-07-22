@@ -1,0 +1,78 @@
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  concurrency: 4
+  issues-exit-code: 1
+  tests: true
+  build-tags:
+    - integration_test
+  skip-dirs-use-default: true
+  modules-download-mode: vendor
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+
+linters:
+  enable-all: true
+  disable:
+    - golint     # deprecated
+    - maligned   # deprecated
+    - scopelint  # deprecated
+    - interfacer # deprecated
+    - testpackage   # not needed
+    - lll
+    - exhaustivestruct
+    - wrapcheck
+  fast: false
+
+# all available settings of specific linters
+linters-settings:
+  tagliatelle:
+    # check the struck tag name case
+    case:
+      # use the struct field name to check the name of the struct tag
+      use-field-name: false
+      rules:
+        # any struct tag type can be used.
+        # support string case: `camel`, `pascal`, `kebab`, `snake`, `goCamel`, `goPascal`, `goKebab`, `goSnake`, `upper`, `lower`
+        json: snake
+        yaml: camel
+        xml: snake
+        bson: camel
+        avro: snake
+        mapstructure: kebab
+
+  stylecheck:
+    go: "1.16"
+    # https://staticcheck.io/docs/options#checks
+    checks: [ "all", "-ST1000" ]
+    # https://staticcheck.io/docs/options#dot_import_whitelist
+    dot-import-whitelist:
+      - fmt
+    # https://staticcheck.io/docs/options#initialisms
+    initialisms: [ "ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS" ]
+
+  unused:
+    go: "1.16"
+
+issues:
+  exclude-use-default: false
+
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - goconst
+        - gochecknoglobals
+        - forbidigo
+        - exhaustivestruct
+        - funlen
+        - wrapcheck

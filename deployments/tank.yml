@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+
+  tank:
+    image: 'phaistos/tank:latest'
+    ports:
+      - 11011:11011
+    volumes:
+      - ${PWD}/deployments/tank_data:/data
+    command: >
+      sh -c "mkdir -p /data/topic1/0; tank -p /data -l :11011"
