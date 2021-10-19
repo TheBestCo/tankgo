@@ -1,46 +1,45 @@
-// +build integration_test
-
 package tankgo
 
 import (
-	"net"
+	"fmt"
 	"testing"
+
+	"github.com/TheBestCo/tankgo/message"
+	"github.com/TheBestCo/tankgo/subscriber"
 )
 
 func TestIntegration(t *testing.T) {
-	t.Parallel()
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:11011")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// f2 := message.ConsumeRequest{
+	// 	ClientVersion: 2,
+	// 	RequestID:     123,
+	// 	Client:        "test_case_1",
+	// 	MaxWaitMS:     0,
+	// 	MinBytes:      0,
+	// 	Topics: []message.FetchRequestTopic{
+	// 		{
+	// 			Name: "apache",
+	// 			Partitions: []message.FetchRequestTopicPartition{
+	// 				{
+	// 					PartitionID:       0,
+	// 					ABSSequenceNumber: 23245940571,
+	// 					FetchSize:         2048,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
 
-	c, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		t.Fatalf("Connection error %s", err.Error())
-	}
-
-	conn := NewConn(c)
-
-	mt, _, err := conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("error in basic header peek: %s", err.Error())
-	}
-
-	if mt != messageTypePing {
-		t.Fatalf("expected ping got %d", mt)
-	}
-
-	f := ConsumeRequest{
+	f2 := message.ConsumeRequest{
 		ClientVersion: 2,
 		RequestID:     123,
 		Client:        "test_case_1",
 		MaxWaitMS:     0,
 		MinBytes:      0,
-		Topics: []FetchRequestTopic{
+		Topics: []message.FetchRequestTopic{
 			{
 				Name: "topic1",
-				Partitions: []FetchRequestTopicPartition{
+				Partitions: []message.FetchRequestTopicPartition{
 					{
 						PartitionID:       0,
 						ABSSequenceNumber: 1,
@@ -51,26 +50,17 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	err = conn.Send(&f)
-	if err != nil {
-		t.Fatalf("error while sending message: %s", err.Error())
+	s, _ := subscriber.NewSubsriber("127.0.0.1:11011")
+	//s, _ := subscriber.NewSubsriber("192.168.10.235:11011")
+
+	s.Ping()
+	messages, _ := s.Subscribe(&f2, 100)
+	fmt.Println("waiting for messages")
+
+	for m := range messages {
+		s := fmt.Sprintf("%s %s", m.Key, m.Payload)
+		fmt.Println(s)
 	}
 
-	var msg interface{}
-	mt, msg, err = conn.ReadMessage()
-
-	if err != nil {
-		t.Fatalf("error in basic header peek: %s", err.Error())
-	}
-
-	if mt != messageTypeConsume {
-		t.Fatalf("expected consume response got %d", mt)
-	}
-
-	consumeResponse, ok := msg.(ConsumeResponse)
-	if !ok {
-		t.Fatalf("expected consume response got %#v", msg)
-	}
-
-	_ = consumeResponse
+	t.Fatal()
 }

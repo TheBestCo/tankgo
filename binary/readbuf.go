@@ -118,6 +118,24 @@ func (rb *ReadBuffer) DiscardN(limit int, n int) (int, error) {
 	return limit - n, err
 }
 
+func (rb *ReadBuffer) ReadVarString(size uint64) (string, error) {
+	buf := make([]byte, size)
+	_, err := io.ReadFull(&rb.reader, buf)
+
+	return string(buf), err
+}
+
+func (rb *ReadBuffer) ReadMessage(size int64) ([]byte, error) {
+	buf := make([]byte, size)
+	_, err := io.ReadFull(&rb.reader, buf)
+	return buf, err
+}
+
+func (rb *ReadBuffer) Remaining() (int, error) {
+	remaining, err := rb.reader.Peek(rb.reader.Buffered())
+	return len(remaining), err
+}
+
 func (rb *ReadBuffer) ReadUint8(limit int, v *uint8) (int, error) {
 	return rb.ReadN(limit, SizeOfUint8Bytes, func(b []byte) { *v = rb.Parser.ParseUint8(b) })
 }
@@ -134,59 +152,76 @@ func (rb *ReadBuffer) ReadUint64(limit int, v *uint64) (int, error) {
 	return rb.ReadN(limit, SizeOfUint64Bytes, func(b []byte) { *v = rb.Parser.ParseUint64(b) })
 }
 
+func (rb *ReadBuffer) Done() bool {
+	return rb.reader.Buffered() == 0
+}
+
 const (
 	eighthBit    = 0x80
 	allSevenBits = 0x7f
+	errFlafs     = 0xfe
 )
 
 func (rb *ReadBuffer) ReadVarInt(limit int, v *int64) (remain int, err error) {
 	// Optimistically assume that most of the time, there will be data buffered
 	// in the reader. If this is not the case, the buffer will be refilled after
 	// consuming zero bytes from the input.
-	input, _ := rb.reader.Peek(rb.reader.Buffered())
-	x := uint64(0)
-	s := uint(0)
+	// input, _ := rb.reader.Peek(rb.reader.Buffered())
+	// x := uint64(0)
+	// s := uint(0)
 
-	for {
-		if len(input) > limit {
-			input = input[:limit]
-		}
+	// for {
+	// 	if len(input) > limit {
+	// 		input = input[:limit]
+	// 	}
 
-		for i, b := range input {
-			if b < eighthBit {
-				x |= uint64(b) << s
-				*v = int64(x>>1) ^ -(int64(x) & 1)
-				n, err := rb.reader.Discard(i + 1)
+	// 	for i, b := range input {
+	// 		if b < eighthBit {
+	// 			// x |= uint64(b) << s
+	// 			// *v = int64(x>>1) ^ -(int64(x) & 1)
+	// 			*v = int64(b)
+	// 			n, err := rb.reader.Discard(i + 1)
 
-				return limit - n, err
-			}
+	// 			return limit - n, err
+	// 		}
 
-			x |= uint64(b&allSevenBits) << s
-			s += 7
-		}
+	// 		x |= uint64(b&allSevenBits) << s
+	// 		s += 7
+	// 	}
 
-		// Make room in the input buffer to load more data from the underlying
-		// stream. The x and s variables are left untouched, ensuring that the
-		// varint decoding can continue on the next loop iteration.
-		n, _ := rb.reader.Discard(len(input))
-		limit -= n
+	// 	// Make room in the input buffer to load more data from the underlying
+	// 	// stream. The x and s variables are left untouched, ensuring that the
+	// 	// varint decoding can continue on the next loop iteration.
+	// 	n, _ := rb.reader.Discard(len(input))
+	// 	limit -= n
 
-		if limit == 0 {
-			return 0, ErrNotEnoughBytes
-		}
+	// 	if limit == 0 {
+	// 		return 0, ErrNotEnoughBytes
+	// 	}
 
-		// Fill the buffer: ask for one more byte, but in practice the reader
-		// will load way more from the underlying stream.
-		if _, err := rb.reader.Peek(1); err != nil {
-			if err == io.EOF {
-				err = ErrNotEnoughBytes
-			}
+	// 	// Fill the buffer: ask for one more byte, but in practice the reader
+	// 	// will load way more from the underlying stream.
+	// 	if _, err := rb.reader.Peek(1); err != nil {
+	// 		if err == io.EOF {
+	// 			err = ErrNotEnoughBytes
+	// 		}
 
-			return limit, err
-		}
+	// 		return limit, err
+	// 	}
 
-		// Grab as many bytes as possible from the buffer, then go on to the
-		// next loop iteration which is going to consume it.
-		input, _ = rb.reader.Peek(rb.reader.Buffered())
+	// 	// Grab as many bytes as possible from the buffer, then go on to the
+	// 	// next loop iteration which is going to consume it.
+	// 	input, _ = rb.reader.Peek(rb.reader.Buffered())
+	// }
+
+	decoded, err := binary.ReadUvarint(&rb.reader)
+
+	*v = int64(decoded)
+	if err != nil {
+		return 0, err
 	}
+
+	remaining, _ := rb.reader.Peek(rb.reader.Buffered())
+
+	return len(remaining), nil
 }
