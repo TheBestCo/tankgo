@@ -50,8 +50,8 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	s, _ := subscriber.NewSubsriber("127.0.0.1:11011")
-	//s, _ := subscriber.NewSubsriber("192.168.10.235:11011")
+	s, _ := subscriber.NewSubscriber("127.0.0.1:11011")
+	//s, _ := subscriber.NewSubscriber("192.168.10.235:11011")
 
 	s.Ping()
 	messages, _ := s.Subscribe(&f2, 100)

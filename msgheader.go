@@ -36,7 +36,7 @@ func ParseBasicHeader(prs binary.Parser, b []byte) (BasicHeader, error) {
 	}, nil
 }
 
-// PeakBasicHeader parses the first 5 bytes into basicHeader without discarting the bytes from read buffer.
+// PeakBasicHeader parses the first 5 bytes into basicHeader without discarding the bytes from read buffer.
 func PeakBasicHeader(rb *binary.ReadBuffer) (BasicHeader, error) {
 	b, err := rb.Peek(sizeOfBasicHeader)
 	if err != nil {

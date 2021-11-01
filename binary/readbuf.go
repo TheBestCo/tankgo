@@ -159,7 +159,7 @@ func (rb *ReadBuffer) Done() bool {
 const (
 	eighthBit    = 0x80
 	allSevenBits = 0x7f
-	errFlafs     = 0xfe
+	errFlags     = 0xfe
 )
 
 func (rb *ReadBuffer) ReadVarInt(limit int, v *int64) (remain int, err error) {

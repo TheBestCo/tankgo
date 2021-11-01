@@ -55,7 +55,7 @@ type TankSubscriber struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
-func NewSubsriber(broker string) (*TankSubscriber, error) {
+func NewSubscriber(broker string) (*TankSubscriber, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", broker)
 	if err != nil {
 		return &TankSubscriber{}, err
@@ -83,15 +83,15 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 		return nil, err
 	}
 
-	topicPartionBaseSeq := make(map[string]int64)
+	topicPartitionBaseSeq := make(map[string]int64)
 
 	for _, t := range r.Topics {
 		for _, p := range t.Partitions {
-			topicPartionBaseSeq[t.Name+"/"+strconv.Itoa(int(p.PartitionID))] = p.ABSSequenceNumber
+			topicPartitionBaseSeq[t.Name+"/"+strconv.Itoa(int(p.PartitionID))] = p.ABSSequenceNumber
 		}
 	}
 
-	m := message.ConsumeResponse{TopicPartionBaseSeq: topicPartionBaseSeq}
+	m := message.ConsumeResponse{TopicPartitionBaseSeq: topicPartitionBaseSeq}
 
 	msgChan := make(chan message.MessageLog, maxConcurrentReads)
 
@@ -112,7 +112,7 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 	return msgChan, err
 }
 
-// ping is a wrapper method of readFromTopic expecting a ping response.
+// Ping is a wrapper method of readFromTopic expecting a ping response.
 func (s *TankSubscriber) Ping() error {
 
 	header, err := s.readBasicHeader()
