@@ -165,7 +165,6 @@ type ConsumeResponse struct {
 }
 
 func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, msgLog chan<- MessageLog) error {
-
 	b, _ := rb.Peek(int(payloadSize))
 
 	fmt.Println(b)

@@ -76,7 +76,6 @@ func NewSubscriber(broker string) (*TankSubscriber, error) {
 }
 
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, error) {
-
 	bh, err := s.sendSubscribeRequest(r)
 
 	if err != nil {
@@ -114,7 +113,6 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 
 // Ping is a wrapper method of readFromTopic expecting a ping response.
 func (s *TankSubscriber) Ping() error {
-
 	header, err := s.readBasicHeader()
 
 	if header.MessageType != message.TypePing {
