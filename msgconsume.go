@@ -98,7 +98,7 @@ func (f *ConsumeRequest) size() uint32 {
 	return sum
 }
 
-// writeToBuffer implements theWritable interface.
+// WriteToBuffer implements theWritable interface.
 func (f *ConsumeRequest) WriteToBuffer(w *binary.WriteBuffer) error {
 	// header
 	bh := BasicHeader{
