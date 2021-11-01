@@ -1,7 +1,7 @@
 package message
 
 import (
-	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/TheBestCo/tankgo/binary"
@@ -165,12 +165,14 @@ type ConsumeResponse struct {
 }
 
 func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, msgLog chan<- MessageLog) error {
-	b, _ := rb.Peek(int(payloadSize))
+	b, err := rb.Peek(int(payloadSize))
+	if err != nil {
+		return err
+	}
 
-	fmt.Println(b)
+	log.Printf("%+v", b)
 
 	limit := int(payloadSize)
-	var err error
 
 	var hl uint32 // header length:u32
 	if _, err = rb.ReadUint32(limit, &hl); err != nil {

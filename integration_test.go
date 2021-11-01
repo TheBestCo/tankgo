@@ -1,11 +1,12 @@
 package tankgo
 
 import (
-	"fmt"
+	"log"
 	"testing"
 
 	"github.com/TheBestCo/tankgo/message"
 	"github.com/TheBestCo/tankgo/subscriber"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIntegration(t *testing.T) {
@@ -50,18 +51,19 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	s, _ := subscriber.NewSubscriber("127.0.0.1:11011")
-	//s, _ := subscriber.NewSubscriber("192.168.10.235:11011")
+	s, err := subscriber.NewSubscriber("127.0.0.1:11011")
+	//s, err := subscriber.NewSubscriber("192.168.10.235:11011")
+	assert.NoError(t, err)
 
-	s.Ping()
+	err = s.Ping()
+	assert.NoError(t, err)
 
-	messages, _ := s.Subscribe(&f2, 100)
-	fmt.Println("waiting for messages")
+	messages, err := s.Subscribe(&f2, 100)
+	assert.NoError(t, err)
+
+	log.Println("waiting for messages")
 
 	for m := range messages {
-		s := fmt.Sprintf("%s %s", m.Key, m.Payload)
-		fmt.Println(s)
+		log.Printf("%s %s", m.Key, m.Payload)
 	}
-
-	t.Fatal()
 }
