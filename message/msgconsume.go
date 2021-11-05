@@ -195,7 +195,7 @@ func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, ms
 	fr.TopicHeader.Topics = make([]Topic, fr.TopicHeader.TopicsCount)
 
 	for i := range fr.TopicHeader.Topics {
-		err := (fr.TopicHeader.Topics[i]).readFromTopic(rb, fr.TopicPartitionBaseSeq, payloadSize, msgLog)
+		err := fr.TopicHeader.Topics[i].readFromTopic(rb, fr.TopicPartitionBaseSeq, payloadSize, msgLog)
 		if err != nil {
 			return err
 		}
@@ -259,7 +259,6 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	if name, err = rb.ReadVarString(uint64(ml)); err != nil {
 		return err
 	}
-
 	t.Name = name
 
 	var totalPartitions uint8
@@ -272,14 +271,12 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	if _, err = rb.ReadUint16(limit, &partitionID); err != nil {
 		return err
 	}
-
 	t.Partition.PartitionID = partitionID
 
 	var errOrFlags uint8
 	if _, err := rb.ReadUint8(limit, &errOrFlags); err != nil {
 		return err
 	}
-
 	t.Partition.ErrorOrFlags = errOrFlags
 
 	var absBaseSeqNum uint64
@@ -293,14 +290,12 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	if _, err := rb.ReadUint64(limit, &highWaterMark); err != nil {
 		return err
 	}
-
 	t.Partition.HighWaterMark = highWaterMark
 
 	var chunkLength uint32
 	if _, err := rb.ReadUint32(limit, &chunkLength); err != nil {
 		return err
 	}
-
 	t.Partition.ChuckLength = chunkLength
 
 	var firstAvailSeqNum uint64
@@ -341,6 +336,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 				continue
 			}
 		}
+
 		consumedFromBundle += binary.SizeOfInt8Bytes
 
 		if (bundleFlag>>2)&0xf == 0 { // check if total messages in message set > 15
@@ -357,7 +353,6 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 			consumed := before - after
 			bundleLimit += int64(binary.SizeOfInt64Bytes - consumed)
 			consumedFromBundle += int64(consumed)
-
 		} else {
 			totalMessages = int64((bundleFlag >> 2) & 0xf) // total messages number is encoded in the bundle flag
 		}
@@ -472,6 +467,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 
 			if msgFlag&0x1 > 0 { // check if message has key
 				var keyLength uint8
+
 				bundleLimit = bundleLength - consumedFromBundle - binary.SizeOfUint8Bytes
 				if _, err = rb.ReadUint8(limit, &keyLength); err != nil {
 					if int64(limit) < bundleLimit {
