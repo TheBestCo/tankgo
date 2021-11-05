@@ -77,7 +77,6 @@ func NewSubscriber(broker string) (*TankSubscriber, error) {
 
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, error) {
 	bh, err := s.sendSubscribeRequest(r)
-
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +117,7 @@ func (s *TankSubscriber) Ping() error {
 	if header.MessageType != message.TypePing {
 		return fmt.Errorf("expected ping response, got :%#v", header.MessageType)
 	}
+
 	return err
 }
 
@@ -129,6 +129,7 @@ func (s *TankSubscriber) readBasicHeader() (message.BasicHeader, error) {
 	if err := bh.ReadHeader(&s.readBuffer, message.SizeOfBasicHeader); err != nil {
 		return message.BasicHeader{}, err
 	}
+
 	return bh, nil
 }
 
@@ -145,7 +146,6 @@ func (s *TankSubscriber) sendSubscribeRequest(w Writable) (message.BasicHeader, 
 	}
 
 	header, err := s.readBasicHeader()
-
 	if err != nil {
 		return header, err
 	}
