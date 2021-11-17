@@ -43,8 +43,7 @@ type Readable interface {
 }
 
 type TankSubscriber struct {
-	broker string
-	con    *net.TCPConn
+	con *net.TCPConn
 
 	// read buffer (synchronized on rlock)
 	rlock      sync.Mutex
