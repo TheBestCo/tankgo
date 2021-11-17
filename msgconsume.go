@@ -98,7 +98,7 @@ func (f *ConsumeRequest) size() uint32 {
 	return sum
 }
 
-// writeToBuffer implements theWritable interface.
+// WriteToBuffer implements theWritable interface.
 func (f *ConsumeRequest) WriteToBuffer(w *binary.WriteBuffer) error {
 	// header
 	bh := BasicHeader{
@@ -198,7 +198,7 @@ func (fr *ConsumeResponse) readFromBuffer(rb *binary.ReadBuffer, payloadSize uin
 type Message struct {
 	CreatedAt     uint64
 	ContentLength uint64
-	SeqNmber      int64
+	SeqNumber     int64
 	Data          []byte
 }
 
@@ -299,8 +299,8 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, payloadSize uint32) error {
 	messages := make([]Message, 0, 100)
 	prevSeqNum := int64(0)
 	for !rb.Done() {
-		var bundleLenght int64
-		if _, err = rb.ReadVarInt(limit, &bundleLenght); err != nil {
+		var bundleLength int64
+		if _, err = rb.ReadVarInt(limit, &bundleLength); err != nil {
 			return err
 		}
 
@@ -319,15 +319,15 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, payloadSize uint32) error {
 			totalMessages = int64(bundleFlag >> 2 & 0xf)
 		}
 
-		sparceBitSet := false
+		sparseBitSet := false
 		if bundleFlag&(0x1<<6) > 0 { // check if sparse bit is set
-			sparceBitSet = true
+			sparseBitSet = true
 
 		}
 
 		var firstAbsSeqNumber uint64
 		var lastAbsSeqNumber int64
-		if sparceBitSet {
+		if sparseBitSet {
 
 			if _, err := rb.ReadUint64(limit, &firstAbsSeqNumber); err != nil {
 				return err
@@ -348,7 +348,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, payloadSize uint32) error {
 			}
 
 			var messageSequenceNum int64
-			if sparceBitSet { // calculate message sequence number
+			if sparseBitSet { // calculate message sequence number
 				if msgFlag&0x4 > 0 { //
 					messageSequenceNum = prevSeqNum + 1
 				} else if i > 0 && i < int(totalMessages)-1 {
@@ -397,7 +397,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, payloadSize uint32) error {
 					ts = messages[i-1].CreatedAt
 				}
 			}
-			messages = append(messages, Message{Data: message, SeqNmber: messageSequenceNum, CreatedAt: ts})
+			messages = append(messages, Message{Data: message, SeqNumber: messageSequenceNum, CreatedAt: ts})
 		}
 	}
 

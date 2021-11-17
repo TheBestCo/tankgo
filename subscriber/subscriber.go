@@ -54,7 +54,7 @@ type TankSubscriber struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
-func NewSubsriber(broker string) (*TankSubscriber, error) {
+func NewSubscriber(broker string) (*TankSubscriber, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", broker)
 	if err != nil {
 		return &TankSubscriber{}, err
@@ -75,22 +75,20 @@ func NewSubsriber(broker string) (*TankSubscriber, error) {
 }
 
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, error) {
-
 	bh, err := s.sendSubscribeRequest(r)
-
 	if err != nil {
 		return nil, err
 	}
 
-	topicPartionBaseSeq := make(map[string]int64)
+	topicPartitionBaseSeq := make(map[string]int64)
 
 	for _, t := range r.Topics {
 		for _, p := range t.Partitions {
-			topicPartionBaseSeq[t.Name+"/"+strconv.Itoa(int(p.PartitionID))] = p.ABSSequenceNumber
+			topicPartitionBaseSeq[t.Name+"/"+strconv.Itoa(int(p.PartitionID))] = p.ABSSequenceNumber
 		}
 	}
 
-	m := message.ConsumeResponse{TopicPartionBaseSeq: topicPartionBaseSeq}
+	m := message.ConsumeResponse{TopicPartitionBaseSeq: topicPartitionBaseSeq}
 
 	msgChan := make(chan message.MessageLog, maxConcurrentReads)
 
@@ -111,14 +109,14 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 	return msgChan, err
 }
 
-// ping is a wrapper method of readFromTopic expecting a ping response.
+// Ping is a wrapper method of readFromTopic expecting a ping response.
 func (s *TankSubscriber) Ping() error {
-
 	header, err := s.readBasicHeader()
 
 	if header.MessageType != message.TypePing {
 		return fmt.Errorf("expected ping response, got :%#v", header.MessageType)
 	}
+
 	return err
 }
 
@@ -130,6 +128,7 @@ func (s *TankSubscriber) readBasicHeader() (message.BasicHeader, error) {
 	if err := bh.ReadHeader(&s.readBuffer, message.SizeOfBasicHeader); err != nil {
 		return message.BasicHeader{}, err
 	}
+
 	return bh, nil
 }
 
@@ -146,7 +145,6 @@ func (s *TankSubscriber) sendSubscribeRequest(w Writable) (message.BasicHeader, 
 	}
 
 	header, err := s.readBasicHeader()
-
 	if err != nil {
 		return header, err
 	}
