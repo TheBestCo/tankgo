@@ -50,12 +50,12 @@ func PeakBasicHeader(rb *binary.ReadBuffer) (BasicHeader, error) {
 func (b *BasicHeader) ReadHeader(rb *binary.ReadBuffer, payloadSize uint32) error {
 	var mt uint8
 
-	if _, err := rb.ReadUint8(binary.SizeOfUint8Bytes, &mt); err != nil {
+	if err := rb.ReadUint8(&mt); err != nil {
 		return err
 	}
 
 	var payload uint32
-	if _, err := rb.ReadUint32(binary.SizeOfUint32Bytes, &payload); err != nil {
+	if err := rb.ReadUint32(&payload); err != nil {
 		return err
 	}
 

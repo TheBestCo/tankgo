@@ -49,36 +49,6 @@ func setupTankContainer(ctx context.Context) (*TankContainer, error) {
 }
 
 func TestIntegration(t *testing.T) {
-	// f2 := message.ConsumeRequest{
-	// 	ClientVersion: 2,
-	// 	RequestID:     123,
-	// 	Client:        "test_case_1",
-	// 	MaxWaitMS:     0,
-	// 	MinBytes:      0,
-	// 	Topics: []message.FetchRequestTopic{
-	// 		{
-	// 			Name: "apache",
-	// 			Partitions: []message.FetchRequestTopicPartition{
-	// 				{
-	// 					PartitionID:       0,
-	// 					ABSSequenceNumber: 23245940571,
-	// 					FetchSize:         2048,
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// }
-
-	ctx := context.Background()
-
-	tankC, err := setupTankContainer(ctx)
-	assert.NoError(t, err)
-	defer tankC.Terminate(ctx)
-
-	// Send message
-	_, err = tankC.Exec(ctx, []string{"/usr/local/bin/tank-cli", "-t" ,"test_topic", "produce", "foo"})
-	assert.NoError(t, err)
-
 	f2 := message.ConsumeRequest{
 		ClientVersion: 2,
 		RequestID:     123,
@@ -87,11 +57,11 @@ func TestIntegration(t *testing.T) {
 		MinBytes:      0,
 		Topics: []message.FetchRequestTopic{
 			{
-				Name: "test_topic",
+				Name: "apache",
 				Partitions: []message.FetchRequestTopicPartition{
 					{
 						PartitionID:       0,
-						ABSSequenceNumber: 1,
+						ABSSequenceNumber: 23245940571,
 						FetchSize:         2048,
 					},
 				},
@@ -99,8 +69,38 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	s, err := subscriber.NewSubscriber("127.0.0.1:" + tankC.Port.Port())
-	//s, err := subscriber.NewSubscriber("192.168.10.235:11011")
+	ctx := context.Background()
+
+	tankC, err := setupTankContainer(ctx)
+	assert.NoError(t, err)
+	defer tankC.Terminate(ctx)
+
+	// Send message
+	// _, err = tankC.Exec(ctx, []string{"/usr/local/bin/tank-cli", "-t", "test_topic", "produce", "foo"})
+	// assert.NoError(t, err)
+
+	// f2 := message.ConsumeRequest{
+	// 	ClientVersion: 2,
+	// 	RequestID:     123,
+	// 	Client:        "test_case_1",
+	// 	MaxWaitMS:     0,
+	// 	MinBytes:      0,
+	// 	Topics: []message.FetchRequestTopic{
+	// 		{
+	// 			Name: "test_topic",
+	// 			Partitions: []message.FetchRequestTopicPartition{
+	// 				{
+	// 					PartitionID:       0,
+	// 					ABSSequenceNumber: 1,
+	// 					FetchSize:         2048,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
+
+	//s, err := subscriber.NewSubscriber("127.0.0.1:" + tankC.Port.Port())
+	s, err := subscriber.NewSubscriber("192.168.10.235:11011")
 	assert.NoError(t, err)
 
 	err = s.Ping()

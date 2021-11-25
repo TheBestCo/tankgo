@@ -11,8 +11,7 @@ func TestReadBuffer_ReadUint64(t *testing.T) {
 		Parser Parser
 	}
 	type args struct {
-		limit int
-		v     *uint64
+		v *uint64
 	}
 	tests := []struct {
 		name    string
@@ -29,13 +28,10 @@ func TestReadBuffer_ReadUint64(t *testing.T) {
 				reader: tt.fields.reader,
 				Parser: tt.fields.Parser,
 			}
-			got, err := rb.ReadUint64(tt.args.limit, tt.args.v)
+			err := rb.ReadUint64(tt.args.v)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReadBuffer.ReadUint64() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if got != tt.want {
-				t.Errorf("ReadBuffer.ReadUint64() = %v, want %v", got, tt.want)
 			}
 		})
 	}
