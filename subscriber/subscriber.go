@@ -57,7 +57,7 @@ func NewSubscriber(broker string) (*TankSubscriber, error) {
 
 	t := TankSubscriber{
 		con:         conn,
-		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian, 1024),
+		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian, 1024*100),
 		writeBuffer: tbinary.NewWriteBuffer(conn, binary.LittleEndian),
 	}
 

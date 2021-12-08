@@ -217,7 +217,8 @@ type Bundle struct {
 }
 
 type Chunk struct {
-	Bundles []Bundle
+	Bundles            []Bundle
+	ConsumedFromBundle uint64
 }
 
 type Partition struct {
@@ -346,6 +347,7 @@ func (t *Topic) getBundleFlag(rb *binary.ReadBuffer) (uint8, error) {
 	if err := rb.ReadUint8(&bundleFlag); err != nil {
 		return 0, err
 	}
+	t.Partition.Chunk.ConsumedFromBundle += binary.SizeOfUint8Bytes
 	return bundleFlag, nil
 }
 
@@ -357,6 +359,13 @@ func (t *Topic) getTotalMessageNum(rb *binary.ReadBuffer, bundleFlag uint8) (int
 			return 0, err
 		}
 		messageCount = uint8(totalMessages)
+		bs := make([]byte, 10)
+		stdbinary.LittleEndian.PutUint64(bs, uint64(messageCount))
+		size := stdbinary.PutUvarint(bs, uint64(messageCount))
+		if size <= 0 {
+			return 0, fmt.Errorf("cannot count varint size")
+		}
+		t.Partition.Chunk.ConsumedFromBundle += uint64(size)
 	}
 	return int(messageCount), nil
 }
@@ -374,6 +383,13 @@ func (t *Topic) getFirstMessageSeqNum(rb *binary.ReadBuffer) (uint64, error) {
 	if err := rb.ReadUint64(&seqNumber); err != nil {
 		return 0, err
 	}
+	bs := make([]byte, 10)
+	stdbinary.LittleEndian.PutUint64(bs, seqNumber)
+	size := stdbinary.PutUvarint(bs, uint64(seqNumber))
+	if size <= 0 {
+		return 0, fmt.Errorf("cannot count varint size")
+	}
+	t.Partition.Chunk.ConsumedFromBundle += uint64(size)
 	return seqNumber, nil
 }
 
@@ -382,6 +398,13 @@ func (t *Topic) getLastMessageOffset(rb *binary.ReadBuffer) (uint64, error) {
 	if _, err := rb.ReadVarUInt(&lastMessageOffest); err != nil {
 		return 0, err
 	}
+	bs := make([]byte, 10)
+	stdbinary.LittleEndian.PutUint64(bs, lastMessageOffest)
+	size := stdbinary.PutUvarint(bs, uint64(lastMessageOffest))
+	if size <= 0 {
+		return 0, fmt.Errorf("cannot count varint size")
+	}
+	t.Partition.Chunk.ConsumedFromBundle += uint64(size)
 	return lastMessageOffest, nil
 }
 
@@ -565,6 +588,10 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		return err
 	}
 
+	if rb.Remaining() == 0 {
+		return fmt.Errorf("empty response from tank")
+	}
+
 	if err = t.readErrorOrFlags(rb); err != nil {
 		return err
 	}
@@ -652,7 +679,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		bundleCompressed := snappyCompressed(bundleFlag)
 
 		if bundleCompressed {
-			compressed, err := getCompressedData(rb, int(bundleLength-t.Partition.ConsumedFromChunk))
+			compressed, err := getCompressedData(rb, int(bundleLength-t.Partition.Chunk.ConsumedFromBundle))
 			if err != nil {
 				return err
 			}
@@ -667,6 +694,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		}
 
 		t.Partition.ConsumedFromChunk += uint64(bundleLength)
+		t.Partition.Chunk.ConsumedFromBundle = 0
 	}
 
 	return nil

@@ -71,7 +71,7 @@ func TestIntegration(t *testing.T) {
 					{
 						PartitionID:       0,
 						ABSSequenceNumber: 1,
-						FetchSize:         2048,
+						FetchSize:         1024,
 					},
 				},
 			},
@@ -87,25 +87,24 @@ func TestIntegration(t *testing.T) {
 	err = s.Ping()
 	assert.NoError(t, err)
 
-	messages, errChan := s.Subscribe(&req, 50)
+	messages, errChan := s.Subscribe(&req, 1000)
 	assert.NoError(t, err)
 
-	msgList := make([]message.MessageLog, 0, 50)
+	msgList := make([]message.MessageLog, 0, 1000)
 
-loop:
-	for {
-		select {
-		case err = <-errChan:
-			if err != nil {
-				t.Fatal(err)
-				break loop
-			}
-		default:
-			for m := range messages {
-				msgList = append(msgList, m)
-			}
-			break loop
+	done := make(chan bool, 1)
+	go func() {
+		for m := range messages {
+			msgList = append(msgList, m)
 		}
+		done <- true
+	}()
+
+	<-done
+
+	err = <-errChan
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	assert.True(t, len(msgList) == 3)
