@@ -67,20 +67,23 @@ func NewSubscriber(broker string) (*TankSubscriber, error) {
 
 	t := TankSubscriber{
 		con:         conn,
-		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian),
+		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian, 1024),
 		writeBuffer: tbinary.NewWriteBuffer(conn, binary.LittleEndian),
 	}
 
 	return &t, nil
 }
 
-func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, error) {
+func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error) {
+
+	errChan := make(chan error, 1)
 	bh, err := s.sendSubscribeRequest(r)
 	if err != nil {
-		return nil, err
+		errChan <- err
+		return nil, errChan
 	}
 
-	topicPartitionBaseSeq := make(map[string]int64)
+	topicPartitionBaseSeq := make(map[string]uint64)
 
 	for _, t := range r.Topics {
 		for _, p := range t.Partitions {
@@ -95,18 +98,23 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 	// consume from stream in the background.
 	done := make(chan bool)
 	go func() {
-		err = m.Consume(&s.readBuffer, bh.PayloadSize, msgChan)
+		errChan <- m.Consume(&s.readBuffer, bh.PayloadSize, msgChan)
 		done <- true
-		fmt.Println("finished")
 	}()
 
 	go func() {
 		defer close(msgChan)
 		<-done
-		fmt.Println("exiting")
 	}()
 
-	return msgChan, err
+	return msgChan, errChan
+}
+
+func (s *TankSubscriber) Close() error {
+	if s.con != nil {
+		return s.con.Close()
+	}
+	return nil
 }
 
 // Ping is a wrapper method of readFromTopic expecting a ping response.

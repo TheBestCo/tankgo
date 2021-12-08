@@ -2,7 +2,6 @@ package tankgo
 
 import (
 	"context"
-	"log"
 	"testing"
 
 	"github.com/TheBestCo/tankgo/message"
@@ -49,26 +48,6 @@ func setupTankContainer(ctx context.Context) (*TankContainer, error) {
 }
 
 func TestIntegration(t *testing.T) {
-	f2 := message.ConsumeRequest{
-		ClientVersion: 2,
-		RequestID:     123,
-		Client:        "test_case_1",
-		MaxWaitMS:     0,
-		MinBytes:      0,
-		Topics: []message.FetchRequestTopic{
-			{
-				Name: "apache",
-				Partitions: []message.FetchRequestTopicPartition{
-					{
-						PartitionID:       0,
-						ABSSequenceNumber: 23245940571,
-						FetchSize:         2048,
-					},
-				},
-			},
-		},
-	}
-
 	ctx := context.Background()
 
 	tankC, err := setupTankContainer(ctx)
@@ -76,42 +55,61 @@ func TestIntegration(t *testing.T) {
 	defer tankC.Terminate(ctx)
 
 	// Send message
-	// _, err = tankC.Exec(ctx, []string{"/usr/local/bin/tank-cli", "-t", "test_topic", "produce", "foo"})
-	// assert.NoError(t, err)
-
-	// f2 := message.ConsumeRequest{
-	// 	ClientVersion: 2,
-	// 	RequestID:     123,
-	// 	Client:        "test_case_1",
-	// 	MaxWaitMS:     0,
-	// 	MinBytes:      0,
-	// 	Topics: []message.FetchRequestTopic{
-	// 		{
-	// 			Name: "test_topic",
-	// 			Partitions: []message.FetchRequestTopicPartition{
-	// 				{
-	// 					PartitionID:       0,
-	// 					ABSSequenceNumber: 1,
-	// 					FetchSize:         2048,
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// }
-
-	//s, err := subscriber.NewSubscriber("127.0.0.1:" + tankC.Port.Port())
-	s, err := subscriber.NewSubscriber("192.168.10.235:11011")
+	_, err = tankC.Exec(ctx, []string{"/usr/local/bin/tank-cli", "-t", "test_topic", "produce", "one", "two", "three"})
 	assert.NoError(t, err)
+
+	req := message.ConsumeRequest{
+		ClientVersion: 2,
+		RequestID:     123,
+		Client:        "test_case_1",
+		MaxWaitMS:     0,
+		MinBytes:      0,
+		Topics: []message.FetchRequestTopic{
+			{
+				Name: "test_topic",
+				Partitions: []message.FetchRequestTopicPartition{
+					{
+						PartitionID:       0,
+						ABSSequenceNumber: 1,
+						FetchSize:         2048,
+					},
+				},
+			},
+		},
+	}
+
+	s, err := subscriber.NewSubscriber("127.0.0.1:" + tankC.Port.Port())
+
+	assert.NoError(t, err)
+
+	defer s.Close()
 
 	err = s.Ping()
 	assert.NoError(t, err)
 
-	messages, err := s.Subscribe(&f2, 100)
+	messages, errChan := s.Subscribe(&req, 50)
 	assert.NoError(t, err)
 
-	log.Println("waiting for messages")
+	msgList := make([]message.MessageLog, 0, 50)
 
-	for m := range messages {
-		log.Printf("%s %s", m.Key, m.Payload)
+loop:
+	for {
+		select {
+		case err = <-errChan:
+			if err != nil {
+				t.Fatal(err)
+				break loop
+			}
+		default:
+			for m := range messages {
+				msgList = append(msgList, m)
+			}
+			break loop
+		}
 	}
+
+	assert.True(t, len(msgList) == 3)
+	assert.Equal(t, "one", string(msgList[0].Payload))
+	assert.Equal(t, "two", string(msgList[1].Payload))
+	assert.Equal(t, "three", string(msgList[2].Payload))
 }

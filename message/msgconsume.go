@@ -1,10 +1,11 @@
 package message
 
 import (
+	"bufio"
 	"bytes"
 	stdbinary "encoding/binary"
+	"errors"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/TheBestCo/tankgo/binary"
@@ -19,7 +20,7 @@ import (
 // FetchRequestTopicPartition struct.
 type FetchRequestTopicPartition struct {
 	PartitionID       int16
-	ABSSequenceNumber int64
+	ABSSequenceNumber uint64
 	FetchSize         int32
 }
 
@@ -165,31 +166,24 @@ func (f *ConsumeRequest) WriteToBuffer(w *binary.WriteBuffer) error {
 type ConsumeResponse struct {
 	headerLength          uint32
 	TopicHeader           TopicHeader
-	TopicPartitionBaseSeq map[string]int64
+	TopicPartitionBaseSeq map[string]uint64
 }
 
 func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, msgLog chan<- MessageLog) error {
-	b, err := rb.Peek(int(payloadSize))
-	if err != nil {
-		return err
-	}
-
-	log.Printf("%+v", b)
-
 	var hl uint32 // header length:u32
-	if err = rb.ReadUint32(&hl); err != nil {
+	if err := rb.ReadUint32(&hl); err != nil {
 		return err
 	}
 	fr.headerLength = hl
 
 	var rid uint32 // request id:u32
-	if err = rb.ReadUint32(&rid); err != nil {
+	if err := rb.ReadUint32(&rid); err != nil {
 		return err
 	}
 	fr.TopicHeader.RequestID = rid
 
 	var tc uint8 // topics count:u8
-	if err = rb.ReadUint8(&tc); err != nil {
+	if err := rb.ReadUint8(&tc); err != nil {
 		return err
 	}
 	fr.TopicHeader.TopicsCount = tc
@@ -227,12 +221,13 @@ type Chunk struct {
 }
 
 type Partition struct {
-	PartitionID      uint16
-	ErrorOrFlags     uint8
-	HighWaterMark    uint64
-	ChuckLength      uint32
-	FirstAvailSeqNum uint64
-	Chunk            Chunk
+	PartitionID       uint16
+	ErrorOrFlags      uint8
+	HighWaterMark     uint64
+	ChuckLength       uint32
+	FirstAvailSeqNum  uint64
+	Chunk             Chunk
+	ConsumedFromChunk uint64
 }
 
 type Topic struct {
@@ -241,7 +236,6 @@ type Topic struct {
 	Partition       Partition
 	LogBaseSeqNum   uint64
 	MessageEnd      uint64
-	BundleEnd       int64
 }
 
 type TopicHeader struct {
@@ -332,11 +326,18 @@ func (t *Topic) readFirstAvailableSeqNum(rb *binary.ReadBuffer) error {
 	return nil
 }
 
-func (t *Topic) getBundleLength(rb *binary.ReadBuffer) (int64, error) {
-	var bundleLength int64 = -10
+func (t *Topic) getBundleLength(rb *binary.ReadBuffer) (uint64, error) {
+	var bundleLength uint64
 	if _, err := rb.ReadVarUInt(&bundleLength); err != nil {
 		return 0, err
 	}
+	bs := make([]byte, 10)
+	stdbinary.LittleEndian.PutUint64(bs, bundleLength)
+	size := stdbinary.PutUvarint(bs, uint64(bundleLength))
+	if size <= 0 {
+		return 0, fmt.Errorf("cannot count varint size")
+	}
+	t.Partition.ConsumedFromChunk += uint64(size)
 	return bundleLength, nil
 }
 
@@ -348,20 +349,24 @@ func (t *Topic) getBundleFlag(rb *binary.ReadBuffer) (uint8, error) {
 	return bundleFlag, nil
 }
 
-func (t *Topic) getTotalMessageNum(rb *binary.ReadBuffer, bundleFlag uint8) (int64, error) {
+func (t *Topic) getTotalMessageNum(rb *binary.ReadBuffer, bundleFlag uint8) (int, error) {
 	messageCount := (bundleFlag >> 2) & 0xf
 	if messageCount == 0 {
-		var totalMessages int64
+		var totalMessages uint64
 		if _, err := rb.ReadVarUInt(&totalMessages); err != nil {
 			return 0, err
 		}
 		messageCount = uint8(totalMessages)
 	}
-	return int64(messageCount), nil
+	return int(messageCount), nil
 }
 
 func sparseBitSet(bundleFlag uint8) bool {
 	return bundleFlag&(0x1<<6) > 0
+}
+
+func readNewTimestamp(msgFlag uint8) bool {
+	return msgFlag&0x2 == 0
 }
 
 func (t *Topic) getFirstMessageSeqNum(rb *binary.ReadBuffer) (uint64, error) {
@@ -372,12 +377,34 @@ func (t *Topic) getFirstMessageSeqNum(rb *binary.ReadBuffer) (uint64, error) {
 	return seqNumber, nil
 }
 
-func (t *Topic) getLastMessageOffset(rb *binary.ReadBuffer) (int64, error) {
-	var lastMessageOffest int64
+func (t *Topic) getLastMessageOffset(rb *binary.ReadBuffer) (uint64, error) {
+	var lastMessageOffest uint64
 	if _, err := rb.ReadVarUInt(&lastMessageOffest); err != nil {
 		return 0, err
 	}
 	return lastMessageOffest, nil
+}
+
+func (t *Topic) getRequestedSeqNum(topicPartitionBaseSeq map[string]uint64) uint64 {
+	return topicPartitionBaseSeq[t.Name+"/"+strconv.Itoa(int(t.Partition.PartitionID))]
+}
+
+func (t *Topic) advanceBaseSeqNum(rb *binary.ReadBuffer, index, messageCount int, firstMsgSeqNumber, lastMsgSeqNumber uint64, msgFlag uint8) error {
+	switch {
+	case index == 0:
+		t.LogBaseSeqNum = firstMsgSeqNumber
+	case msgFlag&0x4 > 0:
+		break
+	case index == messageCount-1:
+		t.LogBaseSeqNum = lastMsgSeqNumber
+	default:
+		delta, err := getMsgSequenceDelta(rb)
+		if err != nil {
+			return err
+		}
+		t.LogBaseSeqNum += uint64(delta)
+	}
+	return nil
 }
 
 func getMessageFlag(rb *binary.ReadBuffer) (uint8, error) {
@@ -388,34 +415,147 @@ func getMessageFlag(rb *binary.ReadBuffer) (uint8, error) {
 	return msgFlag, nil
 }
 
-func getMsgSequenceDelta(rb *binary.ReadBuffer) (int64, error) {
-	var delta int64
+func getMsgSequenceDelta(rb *binary.ReadBuffer) (uint64, error) {
+	var delta uint64
 	if _, err := rb.ReadVarUInt(&delta); err != nil {
 		return 0, err
 	}
 	return delta, nil
 }
 
+func readTimestamp(rb *binary.ReadBuffer) (uint64, error) {
+	var ts uint64
+	if err := rb.ReadUint64(&ts); err != nil {
+		return 0, err
+	}
+	return ts, nil
+}
+
+func readMessageKey(rb *binary.ReadBuffer, msgFlag uint8) ([]byte, error) {
+	var (
+		keyLength uint8
+		keyData   []byte
+		err       error
+	)
+	if err = rb.ReadUint8(&keyLength); err != nil {
+		return []byte{}, err
+	}
+
+	if keyData, err = rb.ReadMessage(int64(keyLength)); err != nil {
+		return []byte{}, err
+	}
+	return keyData, nil
+}
+
+func readMessagePayload(rb *binary.ReadBuffer) ([]byte, error) {
+	var (
+		msgLength uint64
+		payload   []byte
+		err       error
+	)
+
+	if _, err = rb.ReadVarUInt(&msgLength); err != nil {
+		return []byte{}, err
+	}
+
+	if payload, err = rb.ReadMessage(int64(msgLength)); err != nil {
+		return []byte{}, err
+	}
+	return payload, nil
+}
+
+func getCompressedData(rb *binary.ReadBuffer, length int) ([]byte, error) {
+	compressed := make([]byte, 0, length)
+	read := 0
+	remaing := length
+	for read < length {
+		if rb.Buffered() > 0 && rb.Buffered() < remaing {
+			remaing = rb.Buffered()
+		} else {
+			remaing = length - read
+		}
+		b, err := rb.Peek(remaing)
+		if err != nil {
+			unwrapped := errors.Unwrap(err)
+			if errors.As(unwrapped, &bufio.ErrBufferFull) {
+				compressed = append(compressed, b...)
+				read += len(b)
+				rb.DiscardN(len(b))
+				continue
+			}
+			return []byte{}, err
+		} else {
+			compressed = append(compressed, b...)
+			read += len(b)
+			rb.DiscardN(len(b))
+		}
+	}
+	return compressed, nil
+}
+
 func snappyCompressed(bundleFlag uint8) bool {
-	return bundleFlag&3 > 0
+	return bundleFlag&3 == 1
 }
 
-type BundleOffset struct {
-	offset int64
+func (t *Topic) NextBundle(rb *binary.ReadBuffer) bool {
+	return t.Partition.ConsumedFromChunk < uint64(t.Partition.ChuckLength)
 }
 
-func (b *BundleOffset) MarkOffset(offset int64) {
-	b.offset = offset
+func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCount int, firstMsgSeqNumber, lastMsgSeqNumber, requestedSeqNum uint64, logChan chan<- MessageLog) error {
+	var ts uint64
+
+	for i := 0; i < messageCount; i++ {
+		msgFlag, err := getMessageFlag(rb)
+		if err != nil {
+			return err
+		}
+
+		// calculate base sequence number for a sparse bundle
+		if sparseBundle {
+			t.advanceBaseSeqNum(rb, i, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, msgFlag)
+		}
+
+		messageSequenceNum := t.LogBaseSeqNum
+
+		if readNewTimestamp(msgFlag) {
+			var err error
+			ts, err = readTimestamp(rb)
+			if err != nil {
+				return err
+			}
+		}
+
+		var key []byte
+		messageHasKey := msgFlag&0x1 == 1
+
+		// decode key part
+		if messageHasKey {
+			key, err = readMessageKey(rb, msgFlag)
+			if err != nil {
+				return err
+			}
+		}
+
+		// decode message part
+		messagePayload, err := readMessagePayload(rb)
+		if err != nil {
+			return err
+		}
+
+		// send message to channel. It will block if consumers are reading slower than the client's send rate.
+		if messageSequenceNum >= requestedSeqNum {
+			logChan <- MessageLog{Payload: messagePayload, SeqNumber: messageSequenceNum, CreatedAt: ts, Key: key}
+		}
+
+		t.LogBaseSeqNum++
+	}
+	return nil
 }
 
-func (b *BundleOffset) GetOffsetDistance(from int64) int64 {
-	return from - b.offset
-}
-
-func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[string]int64, payloadSize uint32, logChan chan<- MessageLog) error {
-	limit := int(payloadSize)
-
-	var err error
+func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[string]uint64, payloadSize uint32, logChan chan<- MessageLog) error {
+	var (
+		err error
+	)
 
 	if err = t.readTopicName(rb); err != nil {
 		return err
@@ -450,6 +590,12 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		return err
 	}
 
+	requestedSeqNum := t.getRequestedSeqNum(topicPartitionBaseSeq)
+
+	if requestedSeqNum > t.Partition.HighWaterMark {
+		return fmt.Errorf("requested sequence number cannot be greater than last commited message sequence number: %d", t.Partition.HighWaterMark)
+	}
+
 	if err = t.readChunkLength(rb); err != nil {
 		return err
 	}
@@ -458,22 +604,15 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		return err
 	}
 
-	bundleLength, err := t.getBundleLength(rb)
-	if err != nil {
-		return nil // incomplete bundle
-	}
+	for t.NextBundle(rb) {
+		bundleLength, err := t.getBundleLength(rb)
+		if err != nil {
+			return nil // incomplete bundle
+		}
 
-	t.BundleEnd = int64(limit-rb.Buffered()) + bundleLength
-
-	bundleOffset := BundleOffset{}
-	bundleOffset.MarkOffset(int64(limit - rb.Buffered()))
-
-	for rb.Remaining() > 0 {
 		var (
 			firstMsgSeqNumber uint64
 			lastMsgSeqNumber  uint64
-			previousTimestamp uint64
-			bundleLimit       int64
 		)
 
 		bundleFlag, err := t.getBundleFlag(rb)
@@ -510,21 +649,10 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 			t.MessageEnd = t.LogBaseSeqNum + uint64(messageCount)
 		} // Finished reading from bundle header.
 
-		requestedSeqNum := topicPartitionBaseSeq[t.Name+"/"+strconv.Itoa(int(t.Partition.PartitionID))]
-
-		if requestedSeqNum > int64(t.MessageEnd) {
-			if err = rb.DiscardN(int(t.BundleEnd) - int(bundleOffset.offset)); err != nil {
-				return err
-			}
-			t.LogBaseSeqNum = t.MessageEnd
-			continue
-		}
-
 		bundleCompressed := snappyCompressed(bundleFlag)
-		if bundleCompressed {
-			consumedFromBundle := bundleOffset.GetOffsetDistance(int64(limit - rb.Buffered()))
-			compressed, err := rb.Peek(int(bundleLength - consumedFromBundle))
 
+		if bundleCompressed {
+			compressed, err := getCompressedData(rb, int(bundleLength-t.Partition.ConsumedFromChunk))
 			if err != nil {
 				return err
 			}
@@ -532,116 +660,13 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 			if err != nil {
 				return err
 			}
-			//rb.DiscardN(len(compressed))
-			fmt.Println(decoded)
-			*rb = binary.NewReadBuffer(bytes.NewReader(decoded), stdbinary.LittleEndian)
-			bundleLength = int64(len(decoded))
-
+			snappyReader := binary.NewReadBuffer(bytes.NewReader(decoded), stdbinary.LittleEndian, len(decoded))
+			t.readMessages(&snappyReader, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, uint64(requestedSeqNum), logChan)
+		} else {
+			t.readMessages(rb, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, uint64(requestedSeqNum), logChan)
 		}
 
-		var (
-			ts        uint64
-			msgLength int64
-			message   []byte
-			key       []byte
-		)
-
-		//messageSequenceNum := int64(firstMsgSeqNumber)
-		for i := 0; i < int(messageCount); i++ {
-			msgFlag, err := getMessageFlag(rb)
-			if err != nil {
-				return err
-			}
-
-			if sparseBundle { // calculate message sequence number
-				switch {
-				case i == 0:
-					t.LogBaseSeqNum = firstMsgSeqNumber
-				case msgFlag&0x4 > 0:
-					break
-				case i == int(messageCount)-1:
-					if err != nil {
-						return err
-					}
-					t.LogBaseSeqNum = lastMsgSeqNumber
-					//messageSequenceNum = delta + prevSeqNum + 1
-				default:
-					delta, err := getMsgSequenceDelta(rb)
-					if err != nil {
-						return err
-					}
-					t.LogBaseSeqNum += uint64(delta)
-					//messageSequenceNum = int64(lastMsgSeqNumber)
-				}
-				t.LogBaseSeqNum++
-				//prevSeqNum = messageSequenceNum
-			}
-
-			messageSequenceNum := t.LogBaseSeqNum
-
-			usePrevTimestamp := true
-			if msgFlag&0x2 == 0 {
-				if err := rb.ReadUint64(&ts); err != nil {
-					if int64(limit) < bundleLimit {
-						return err
-					} else {
-						continue
-					}
-				}
-
-				previousTimestamp = ts
-				usePrevTimestamp = false
-			}
-
-			if usePrevTimestamp {
-				ts = previousTimestamp
-			}
-
-			if msgFlag&0x1 > 0 { // check if message has key
-				var keyLength uint8
-				if err = rb.ReadUint8(&keyLength); err != nil {
-					if int64(limit) < bundleLimit {
-						return err
-					} else {
-						continue
-					}
-				}
-
-				if key, err = rb.ReadMessage(int64(keyLength)); err != nil {
-					if int64(limit) < bundleLimit {
-						return err
-					} else {
-						continue
-					}
-				}
-			} else {
-				key = nil
-			}
-
-			// decode message part
-			before := rb.Remaining()
-			if _, err := rb.ReadVarUInt(&msgLength); err != nil {
-				if int64(limit) < bundleLimit {
-					return err
-				} else {
-					continue
-				}
-			}
-			after := rb.Remaining()
-			consumed := before - after
-			bundleLimit += int64(binary.SizeOfInt64Bytes - consumed)
-
-			if message, err = rb.ReadMessage(msgLength); err != nil {
-				if int64(limit) < bundleLimit {
-					return err
-				} else {
-					continue
-				}
-			}
-
-			// send message to channel. It will block if consumers are reading slower than the client's send rate.
-			logChan <- MessageLog{Payload: message, SeqNumber: messageSequenceNum, CreatedAt: ts, Key: key}
-		}
+		t.Partition.ConsumedFromChunk += uint64(bundleLength)
 	}
 
 	return nil

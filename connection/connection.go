@@ -1,7 +1,6 @@
 package connection
 
 import (
-	"encoding/binary"
 	"net"
 	"sync"
 
@@ -21,13 +20,13 @@ type Conn struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
-// NewConn returns a new tank connection.
-func NewConn(conn net.Conn) *Conn {
-	c := &Conn{
-		conn:        conn,
-		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian),
-		writeBuffer: tbinary.NewWriteBuffer(conn, binary.LittleEndian),
-	}
+// // NewConn returns a new tank connection.
+// func NewConn(conn net.Conn) *Conn {
+// 	c := &Conn{
+// 		conn:        conn,
+// 		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian),
+// 		writeBuffer: tbinary.NewWriteBuffer(conn, binary.LittleEndian),
+// 	}
 
-	return c
-}
+// 	return c
+// }
