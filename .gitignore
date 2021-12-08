@@ -1,3 +1,11 @@
+# Custom
+/deployments/tank_data/*
+# End of Custom
+
+# Created by https://www.toptal.com/developers/gitignore/api/go,visualstudiocode
+# Edit at https://www.toptal.com/developers/gitignore?templates=go,visualstudiocode
+
+### Go ###
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -5,18 +13,29 @@
 *.so
 *.dylib
 
-# Test binary, build with `go test -c`
+# Test binary, built with `go test -c`
 *.test
-
-# Ignore local configurations
-.conf
-
-# Workspace files produced by JetBrains
-*.idea
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Dependency directories (remove the comment below to include it)
+# vendor/
 
-/deployments/tank_data/*
-/.vscode/*
+### Go Patch ###
+/vendor/
+/Godeps/
+
+### VisualStudioCode ###
+.vscode/*
+*.code-workspace
+
+# Local History for Visual Studio Code
+.history/
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
+.ionide
+
+# End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode

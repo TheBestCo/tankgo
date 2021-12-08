@@ -1,11 +1,11 @@
-package tankgo
+package message
 
 import (
 	"github.com/TheBestCo/tankgo/binary"
 )
 
-// sizeOfBasicHeader =  msgId:u8 + payload size:u32 .
-const sizeOfBasicHeader = binary.SizeOfUint8Bytes + binary.SizeOfUint32Bytes
+// SizeOfBasicHeader =  msgId:u8 + payload size:u32 .
+const SizeOfBasicHeader = binary.SizeOfUint8Bytes + binary.SizeOfUint32Bytes
 
 // BasicHeader struct.
 type BasicHeader struct {
@@ -24,9 +24,9 @@ func (b BasicHeader) writeToBuffer(w *binary.WriteBuffer) error {
 
 // ParseBasicHeader parses a basic header from a slice.
 func ParseBasicHeader(prs binary.Parser, b []byte) (BasicHeader, error) {
-	_ = b[sizeOfBasicHeader-1] // bounds check hint to compiler
+	_ = b[SizeOfBasicHeader-1] // bounds check hint to compiler
 
-	if len(b) < sizeOfBasicHeader {
+	if len(b) < SizeOfBasicHeader {
 		return BasicHeader{}, binary.ErrNotEnoughBytes
 	}
 
@@ -36,9 +36,9 @@ func ParseBasicHeader(prs binary.Parser, b []byte) (BasicHeader, error) {
 	}, nil
 }
 
-// PeakBasicHeader parses the first 5 bytes into basicHeader without discarting the bytes from read buffer.
+// PeakBasicHeader parses the first 5 bytes into basicHeader without discarding the bytes from read buffer.
 func PeakBasicHeader(rb *binary.ReadBuffer) (BasicHeader, error) {
-	b, err := rb.Peek(sizeOfBasicHeader)
+	b, err := rb.Peek(SizeOfBasicHeader)
 	if err != nil {
 		return BasicHeader{}, err
 	}
@@ -46,16 +46,16 @@ func PeakBasicHeader(rb *binary.ReadBuffer) (BasicHeader, error) {
 	return ParseBasicHeader(rb.Parser, b)
 }
 
-// read parses the first 5 bytes into basicHeader.
-func (b *BasicHeader) readFromBuffer(rb *binary.ReadBuffer, payloadSize uint32) error {
+// ReadHeader parses the first 5 bytes into basicHeader.
+func (b *BasicHeader) ReadHeader(rb *binary.ReadBuffer, payloadSize uint32) error {
 	var mt uint8
 
-	if _, err := rb.ReadUint8(binary.SizeOfUint8Bytes, &mt); err != nil {
+	if err := rb.ReadUint8(&mt); err != nil {
 		return err
 	}
 
 	var payload uint32
-	if _, err := rb.ReadUint32(binary.SizeOfUint32Bytes, &payload); err != nil {
+	if err := rb.ReadUint32(&payload); err != nil {
 		return err
 	}
 

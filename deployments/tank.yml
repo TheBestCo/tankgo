@@ -3,7 +3,7 @@ version: "3.8"
 services:
 
   tank:
-    image: 'phaistos/tank:latest'
+    image: 'phaistos/tank'
     ports:
       - 11011:11011
     volumes:
