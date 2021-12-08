@@ -165,12 +165,6 @@ func (rb *ReadBuffer) SnappyReader() *snappy.Reader {
 	return snappy.NewReader(&rb.reader)
 }
 
-const (
-	eighthBit    = 0x80
-	allSevenBits = 0x7f
-	errFlags     = 0xfe
-)
-
 func (rb *ReadBuffer) ReadVarUInt(v *uint64) (remain int, err error) {
 	decoded, err := binary.ReadUvarint(&rb.reader)
 	*v = decoded
@@ -179,80 +173,4 @@ func (rb *ReadBuffer) ReadVarUInt(v *uint64) (remain int, err error) {
 	}
 
 	return rb.Remaining(), nil
-}
-
-func NewBuffer() *Buffer {
-	return &Buffer{
-		data: make([]byte, 1024),
-	}
-}
-
-type Buffer struct {
-	data []byte
-	i    int
-	r    io.Reader
-	err  error
-}
-
-func (b *Buffer) Reset(r io.Reader) {
-	b.data = b.data[:0]
-	b.i = 0
-	b.err = nil
-	b.r = r
-}
-
-func (b *Buffer) Next(l int) ([]byte, error) {
-	if b.i+l > len(b.data) {
-		// Asking for more data than we have. refill
-		if err := b.refill(l); err != nil {
-			return nil, err
-		}
-	}
-
-	b.i += l
-	return b.data[b.i-l : b.i], nil
-}
-
-// Peek allows direct access to the current remaining buffer
-func (b *Buffer) Peek() []byte {
-	return b.data[b.i:]
-}
-
-// Dicard consumes data in the current buffer
-func (b *Buffer) Discard(n int) {
-	b.i += n
-}
-
-// Refill forces the buffer to try to put at least one more byte into its buffer
-func (b *Buffer) Refill() error {
-	return b.refill(1)
-}
-
-func (b *Buffer) refill(l int) error {
-	if b.err != nil {
-		// We already know we can't get more data
-		return b.err
-	}
-
-	// fill the rest of the buffer from the reader
-	if b.r != nil {
-		// shift existing data down over the read portion of the buffer
-		n := copy(b.data[:cap(b.data)], b.data[b.i:])
-		b.i = 0
-
-		read, err := io.ReadFull(b.r, b.data[n:cap(b.data)])
-
-		b.data = b.data[:n+read]
-		if err == io.ErrUnexpectedEOF {
-			err = io.EOF
-		}
-		b.err = err
-	}
-
-	if b.i+l > len(b.data) {
-		// Still not enough data
-		return io.ErrUnexpectedEOF
-	}
-
-	return nil
 }
