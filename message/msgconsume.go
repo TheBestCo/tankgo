@@ -430,6 +430,14 @@ func (t *Topic) advanceBaseSeqNum(rb *binary.ReadBuffer, index, messageCount int
 	return nil
 }
 
+func (t *Topic) advanceConsumedFromChunk(size uint64) {
+	t.Partition.ConsumedFromChunk += size
+}
+
+func (t *Topic) resetConsumedFromBundle() {
+	t.Partition.Chunk.ConsumedFromBundle = 0
+}
+
 func getMessageFlag(rb *binary.ReadBuffer) (uint8, error) {
 	var msgFlag uint8
 	if err := rb.ReadUint8(&msgFlag); err != nil {
@@ -530,7 +538,7 @@ func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCo
 	for i := 0; i < messageCount; i++ {
 		msgFlag, err := getMessageFlag(rb)
 		if err != nil {
-			return err
+			return NewMessageError(err, "error while reading message flag")
 		}
 
 		// calculate base sequence number for a sparse bundle
@@ -544,7 +552,7 @@ func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCo
 			var err error
 			ts, err = readTimestamp(rb)
 			if err != nil {
-				return err
+				return NewMessageError(err, "error while reading message timestamp")
 			}
 		}
 
@@ -555,14 +563,14 @@ func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCo
 		if messageHasKey {
 			key, err = readMessageKey(rb, msgFlag)
 			if err != nil {
-				return err
+				return NewMessageError(err, "error while reading message key")
 			}
 		}
 
 		// decode message part
 		messagePayload, err := readMessagePayload(rb)
 		if err != nil {
-			return err
+			return NewMessageError(err, "error while reading message data")
 		}
 
 		// send message to channel. It will block if consumers are reading slower than the client's send rate.
@@ -581,15 +589,15 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	)
 
 	if err = t.readTopicName(rb); err != nil {
-		return err
+		return NewMessageError(err, "error while reading topic name")
 	}
 
 	if err = t.readPartitionInfo(rb); err != nil {
-		return err
+		return NewMessageError(err, "error while reading partition info")
 	}
 
 	if rb.Remaining() == 0 {
-		return fmt.Errorf("empty response from tank")
+		return NewMessageError(EmptyResponse, "empty tank response")
 	}
 
 	if err = t.readErrorOrFlags(rb); err != nil {
@@ -598,43 +606,46 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 
 	switch t.Partition.ErrorOrFlags {
 	case 0xfb:
-		return fmt.Errorf("system error while attempting to access topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		errMsg := fmt.Sprintf("system error while attempting to access topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		return NewMessageError(nil, errMsg)
 	case 0xff:
-		return fmt.Errorf("undefined partion")
+		return NewMessageError(nil, "undefined partion")
 	case 0xfd:
-		return fmt.Errorf("no current leader for topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		errMsg := fmt.Sprintf("no current leader for topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		return NewMessageError(nil, errMsg)
 	case 0xfc: // TODO: maybe this needs more handling
-		return fmt.Errorf("different leader")
+		return NewMessageError(nil, "different leader")
 	case 0xfe: // The first bundle in the bundles chunk is a sparse bundle. It encodes the first and last message seq.number in that bundle header.
 		t.LogBaseSeqNum = 0
 	default:
 		if err = t.readLogBaseSeqNumber(rb); err != nil {
-			return err
+			return NewMessageError(err, "error in partition flags")
 		}
 	}
 
 	if err = t.readHighWaterMark(rb); err != nil {
-		return err
+		return NewMessageError(err, "error while reading high water mark")
 	}
 
 	requestedSeqNum := t.getRequestedSeqNum(topicPartitionBaseSeq)
 
 	if requestedSeqNum > t.Partition.HighWaterMark {
-		return fmt.Errorf("requested sequence number cannot be greater than last commited message sequence number: %d", t.Partition.HighWaterMark)
+		errMsg := fmt.Sprintf("requested sequence number cannot be greater than last commited message sequence number: %d", t.Partition.HighWaterMark)
+		return NewMessageError(nil, errMsg)
 	}
 
 	if err = t.readChunkLength(rb); err != nil {
-		return err
+		return NewMessageError(err, "error while reading chunck length")
 	}
 
 	if err = t.readFirstAvailableSeqNum(rb); err != nil {
-		return err
+		return NewMessageError(err, "error while reading first available sequence number")
 	}
 
 	for t.NextBundle(rb) {
 		bundleLength, err := t.getBundleLength(rb)
-		if err != nil {
-			return nil // incomplete bundle
+		if err != nil || bundleLength == 0 {
+			return NewMessageError(err, "incomplete bundle") // incomplete bundle
 		}
 
 		var (
@@ -644,12 +655,12 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 
 		bundleFlag, err := t.getBundleFlag(rb)
 		if err != nil {
-			return err
+			return NewMessageError(err, "error while reading bundle flag")
 		}
 
 		messageCount, err := t.getTotalMessageNum(rb, bundleFlag)
 		if err != nil {
-			return err
+			return NewMessageError(err, "error while reading bundle message count")
 		}
 
 		// check if sparse bit is set
@@ -658,13 +669,13 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 			var err error
 			firstMsgSeqNumber, err = t.getFirstMessageSeqNum(rb)
 			if err != nil {
-				return err
+				return NewMessageError(err, "error while reading sparse bit")
 			}
 
 			if messageCount != 1 {
 				lastMessageOffset, err := t.getLastMessageOffset(rb)
 				if err != nil {
-					return err
+					return NewMessageError(err, "error while reading last message offset")
 				}
 				lastMsgSeqNumber = uint64(lastMessageOffset) + firstMsgSeqNumber + 1
 			} else {
@@ -681,20 +692,20 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 		if bundleCompressed {
 			compressed, err := getCompressedData(rb, int(bundleLength-t.Partition.Chunk.ConsumedFromBundle))
 			if err != nil {
-				return err
+				return NewMessageError(err, "error while retrieving compressed bundle data")
 			}
 			decoded, err := snappy.Decode(nil, compressed)
 			if err != nil {
-				return err
+				return NewMessageError(err, "error in snappy decoding")
 			}
 			snappyReader := binary.NewReadBuffer(bytes.NewReader(decoded), stdbinary.LittleEndian, len(decoded))
-			t.readMessages(&snappyReader, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, uint64(requestedSeqNum), logChan)
+			t.readMessages(&snappyReader, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, requestedSeqNum, logChan)
 		} else {
-			t.readMessages(rb, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, uint64(requestedSeqNum), logChan)
+			t.readMessages(rb, sparseBundle, messageCount, firstMsgSeqNumber, lastMsgSeqNumber, requestedSeqNum, logChan)
 		}
 
-		t.Partition.ConsumedFromChunk += uint64(bundleLength)
-		t.Partition.Chunk.ConsumedFromBundle = 0
+		t.advanceConsumedFromChunk(bundleLength)
+		t.resetConsumedFromBundle()
 	}
 
 	return nil
