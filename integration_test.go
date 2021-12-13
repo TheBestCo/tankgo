@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/TheBestCo/tankgo/message"
-	"github.com/TheBestCo/tankgo/subscriber"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -78,7 +77,7 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	s, err := subscriber.NewSubscriber("127.0.0.1:" + tankC.Port.Port())
+	s, err := NewSubscriber(ctx, "127.0.0.1:"+tankC.Port.Port())
 
 	assert.NoError(t, err)
 

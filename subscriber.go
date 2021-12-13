@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	tbinary "github.com/TheBestCo/tankgo/binary"
 	"github.com/TheBestCo/tankgo/message"
@@ -44,21 +45,26 @@ type TankSubscriber struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
-func NewSubscriber(broker string) (*TankSubscriber, error) {
+func NewSubscriber(ctx context.Context, broker string) (*TankSubscriber, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", broker)
 	if err != nil {
 		return &TankSubscriber{}, err
 	}
 
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	d := net.Dialer{Timeout: time.Millisecond * 500}
+	conn, err := d.DialContext(ctx, "tcp", tcpAddr.String())
 	if err != nil {
 		return &TankSubscriber{}, err
 	}
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return &TankSubscriber{}, fmt.Errorf("cannot create new tcp connection")
+	}
 
 	t := TankSubscriber{
-		con:         conn,
-		readBuffer:  tbinary.NewReadBuffer(conn, binary.LittleEndian, 1024*100),
-		writeBuffer: tbinary.NewWriteBuffer(conn, binary.LittleEndian),
+		con:         tcpConn,
+		readBuffer:  tbinary.NewReadBuffer(tcpConn, binary.LittleEndian, 1024*100),
+		writeBuffer: tbinary.NewWriteBuffer(tcpConn, binary.LittleEndian),
 	}
 
 	return &t, nil
