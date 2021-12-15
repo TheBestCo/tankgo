@@ -45,6 +45,7 @@ type TankSubscriber struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
+// NewSubscriber creates a new TankSubsciber.
 func NewSubscriber(ctx context.Context, broker string) (*TankSubscriber, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", broker)
 	if err != nil {
@@ -89,6 +90,7 @@ func (s *TankSubscriber) Reset(ctx context.Context) error {
 	return nil
 }
 
+// Subscribe to TANK server based on the provided consume request. It returns a message log channel of maxConcurrentReads size and an error channel.
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error) {
 
 	errChan := make(chan error, 1)
@@ -125,6 +127,9 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 	return msgChan, errChan
 }
 
+// GetTopicsHighWaterMark returns a map with the HighWaterMark values per topic based on the request.
+// Because there is no specific TANK request to respond with just the HighWaterMark for a topic, the request should be the same as if the subsriber requested a regular consume request.
+// If a new consume request is to be requested after this call then Reset must be called in between or else TANK will respond with an error.
 func (s *TankSubscriber) GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error) {
 	_, err := s.sendSubscribeRequest(r)
 	if err != nil {
