@@ -86,10 +86,21 @@ func TestIntegration(t *testing.T) {
 	err = s.Ping()
 	assert.NoError(t, err)
 
-	messages, errChan := s.Subscribe(&req, 1000)
+	highWaterMarkMap, err := s.GetTopicsHighWaterMark(&req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(3), highWaterMarkMap["test_topic"])
+
+	err = s.Reset(ctx)
 	assert.NoError(t, err)
 
-	msgList := make([]message.MessageLog, 0, 1000)
+	err = s.Ping()
+	assert.NoError(t, err)
+
+	messages, errChan := s.Subscribe(&req, 10)
+	assert.NoError(t, err)
+
+	msgList := make([]message.MessageLog, 0, 10)
 
 	done := make(chan bool, 1)
 	go func() {

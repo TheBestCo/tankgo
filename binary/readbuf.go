@@ -174,3 +174,7 @@ func (rb *ReadBuffer) ReadVarUInt(v *uint64) (remain int, err error) {
 
 	return rb.Remaining(), nil
 }
+
+func (rb *ReadBuffer) Reset(r io.Reader) {
+	rb.reader.Reset(r)
+}

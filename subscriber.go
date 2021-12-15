@@ -70,6 +70,25 @@ func NewSubscriber(ctx context.Context, broker string) (*TankSubscriber, error) 
 	return &t, nil
 }
 
+// Reset resets TankSubscriber's underlying connection and read/write buffers.
+// It's used when the subscriber wants to early drop the existing connection with TANK and all data from a previous request because a new request will follow.
+func (s *TankSubscriber) Reset(ctx context.Context) error {
+	d := net.Dialer{Timeout: time.Millisecond * 500}
+	conn, err := d.DialContext(ctx, "tcp", s.con.RemoteAddr().String())
+	if err != nil {
+		return err
+	}
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return fmt.Errorf("cannot create new tcp connection")
+	}
+	s.con.Close()
+	s.con = tcpConn
+	s.readBuffer.Reset(s.con)
+	s.writeBuffer.Reset(s.con)
+	return nil
+}
+
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error) {
 
 	errChan := make(chan error, 1)
@@ -104,6 +123,30 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 	}()
 
 	return msgChan, errChan
+}
+
+func (s *TankSubscriber) GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error) {
+	_, err := s.sendSubscribeRequest(r)
+	if err != nil {
+		return map[string]uint64{}, err
+	}
+
+	topicPartitionBaseSeq := make(map[string]uint64)
+
+	for _, t := range r.Topics {
+		for _, p := range t.Partitions {
+			topicPartitionBaseSeq[t.Name+"/"+strconv.Itoa(int(p.PartitionID))] = p.ABSSequenceNumber
+		}
+	}
+
+	m := message.ConsumeResponse{TopicPartitionBaseSeq: topicPartitionBaseSeq}
+	seqNumbersMap, err := m.GetTopicsLatestSequenceNumber(&s.readBuffer)
+
+	if err != nil {
+		return map[string]uint64{}, err
+	}
+
+	return seqNumbersMap, nil
 }
 
 func (s *TankSubscriber) Close() error {

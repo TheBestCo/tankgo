@@ -128,3 +128,8 @@ func (wb *WriteBuffer) WriteString(s string) error {
 
 	return nil
 }
+
+func (wb *WriteBuffer) Reset(w io.Writer) {
+	wb.b = [16]byte{}
+	wb.Writer.Reset(w)
+}

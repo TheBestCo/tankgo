@@ -199,6 +199,38 @@ func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, ms
 
 	return nil
 }
+func (fr *ConsumeResponse) GetTopicsLatestSequenceNumber(rb *binary.ReadBuffer) (map[string]uint64, error) {
+	var hl uint32 // header length:u32
+	if err := rb.ReadUint32(&hl); err != nil {
+		return map[string]uint64{}, err
+	}
+	fr.headerLength = hl
+
+	var rid uint32 // request id:u32
+	if err := rb.ReadUint32(&rid); err != nil {
+		return map[string]uint64{}, err
+	}
+	fr.TopicHeader.RequestID = rid
+
+	var tc uint8 // topics count:u8
+	if err := rb.ReadUint8(&tc); err != nil {
+		return map[string]uint64{}, err
+	}
+	fr.TopicHeader.TopicsCount = tc
+
+	fr.TopicHeader.Topics = make([]Topic, fr.TopicHeader.TopicsCount)
+
+	topipHighWaterMarkMap := make(map[string]uint64)
+	for i := range fr.TopicHeader.Topics {
+		highWaterMark, err := fr.TopicHeader.Topics[i].getHighWaterMark(rb)
+		if err != nil {
+			return map[string]uint64{}, err
+		}
+		topipHighWaterMarkMap[fr.TopicHeader.Topics[i].Name] = highWaterMark
+	}
+
+	return topipHighWaterMarkMap, nil
+}
 
 type Message struct {
 	Type MessageType
@@ -583,6 +615,53 @@ func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCo
 	return nil
 }
 
+func (t *Topic) getHighWaterMark(rb *binary.ReadBuffer) (uint64, error) {
+	var (
+		err error
+	)
+
+	if err = t.readTopicName(rb); err != nil {
+		return 0, NewMessageError(err, "error while reading topic name")
+	}
+
+	if err = t.readPartitionInfo(rb); err != nil {
+		return 0, NewMessageError(err, "error while reading partition info")
+	}
+
+	if rb.Remaining() == 0 {
+		return 0, NewMessageError(EmptyResponse, "empty tank response")
+	}
+
+	if err = t.readErrorOrFlags(rb); err != nil {
+		return 0, NewMessageError(err, "error while reading errorOrFlags")
+	}
+
+	switch t.Partition.ErrorOrFlags {
+	case 0xfb:
+		errMsg := fmt.Sprintf("system error while attempting to access topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		return 0, NewMessageError(nil, errMsg)
+	case 0xff:
+		return 0, NewMessageError(nil, "undefined partion")
+	case 0xfd:
+		errMsg := fmt.Sprintf("no current leader for topic %s, partition %d", t.Name, t.Partition.PartitionID)
+		return 0, NewMessageError(nil, errMsg)
+	case 0xfc: // TODO: maybe this needs more handling
+		return 0, NewMessageError(nil, "different leader")
+	case 0xfe: // The first bundle in the bundles chunk is a sparse bundle. It encodes the first and last message seq.number in that bundle header.
+		t.LogBaseSeqNum = 0
+	default:
+		if err = t.readLogBaseSeqNumber(rb); err != nil {
+			return 0, NewMessageError(err, "error in partition flags")
+		}
+	}
+
+	if err = t.readHighWaterMark(rb); err != nil {
+		return 0, NewMessageError(err, "error while reading high water mark")
+	}
+
+	return t.Partition.HighWaterMark, nil
+}
+
 func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[string]uint64, payloadSize uint32, logChan chan<- MessageLog) error {
 	var (
 		err error
@@ -601,7 +680,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	}
 
 	if err = t.readErrorOrFlags(rb); err != nil {
-		return err
+		return NewMessageError(err, "error in partition flags")
 	}
 
 	switch t.Partition.ErrorOrFlags {
