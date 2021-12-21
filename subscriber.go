@@ -14,7 +14,9 @@ import (
 )
 
 type Subscriber interface {
-	Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error)
+	Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error)
+	Reset(ctx context.Context) error
+	GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error)
 	Close() error
 }
 
@@ -37,11 +39,11 @@ type TankSubscriber struct {
 	con *net.TCPConn
 
 	// read buffer (synchronized on rlock)
-	rlock      sync.Mutex
+	rlock      *sync.Mutex
 	readBuffer tbinary.ReadBuffer
 
 	// write buffer (synchronized on wlock)
-	wlock       sync.Mutex
+	wlock       *sync.Mutex
 	writeBuffer tbinary.WriteBuffer
 }
 
@@ -64,15 +66,17 @@ func NewSubscriber(ctx context.Context, broker string) (*TankSubscriber, error) 
 
 	t := TankSubscriber{
 		con:         tcpConn,
+		rlock:       &sync.Mutex{},
 		readBuffer:  tbinary.NewReadBuffer(tcpConn, binary.LittleEndian, 1024*100),
 		writeBuffer: tbinary.NewWriteBuffer(tcpConn, binary.LittleEndian),
+		wlock:       &sync.Mutex{},
 	}
 
 	return &t, nil
 }
 
 // Reset resets TankSubscriber's underlying connection and read/write buffers.
-// It's used when the subscriber wants to early drop the existing connection with TANK and all data from a previous request because a new request will follow.
+// It's used when the subscriber wants to early drop the existing connection with TANK and all data from a previous request because a new request will follow or use a different context value.
 func (s *TankSubscriber) Reset(ctx context.Context) error {
 	d := net.Dialer{Timeout: time.Millisecond * 500}
 	conn, err := d.DialContext(ctx, "tcp", s.con.RemoteAddr().String())
