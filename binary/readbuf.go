@@ -3,7 +3,6 @@ package binary
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
 	"io"
 
 	"github.com/golang/snappy"
@@ -100,9 +99,6 @@ func (rb *ReadBuffer) ReadN(n int, f func([]byte)) error {
 
 	f(b)
 
-	if n != len(b) {
-		fmt.Print("more")
-	}
 	return rb.DiscardN(n)
 }
 

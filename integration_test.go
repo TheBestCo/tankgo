@@ -77,7 +77,8 @@ func TestIntegration(t *testing.T) {
 		},
 	}
 
-	s, err := NewSubscriber(ctx, "127.0.0.1:"+tankC.Port.Port())
+	s := &TankSubscriber{}
+	err = s.Connect(ctx, "127.0.0.1:"+tankC.Port.Port(), DefaultConTimeout, DefaultBufSize)
 
 	assert.NoError(t, err)
 

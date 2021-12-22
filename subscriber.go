@@ -14,9 +14,11 @@ import (
 )
 
 type Subscriber interface {
+	Connect(ctx context.Context, broker string) error
 	Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error)
 	Reset(ctx context.Context) error
 	GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error)
+	Ping() error
 	Close() error
 }
 
@@ -47,32 +49,43 @@ type TankSubscriber struct {
 	writeBuffer tbinary.WriteBuffer
 }
 
-// NewSubscriber creates a new TankSubsciber.
-func NewSubscriber(ctx context.Context, broker string) (*TankSubscriber, error) {
+// Connect initializes a TankSubscriber with the underlying connection to broker.
+// A context is passed to optionally handle the initialization of the underlying connection if the connection is not established during the timeout provided.
+// If connectTimeout is set to 0 then a default timeout of 500 ms is used.
+// If bufsize is set to 0 then the default buffer size of 100KB is used instead.
+func (s *TankSubscriber) Connect(ctx context.Context, broker string, connectTimeout time.Duration, bufsize int) error {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", broker)
 	if err != nil {
-		return &TankSubscriber{}, err
+		return err
 	}
 
-	d := net.Dialer{Timeout: time.Millisecond * 500}
+	if connectTimeout == 0 {
+		connectTimeout = DefaultConTimeout
+	}
+	d := net.Dialer{Timeout: connectTimeout}
 	conn, err := d.DialContext(ctx, "tcp", tcpAddr.String())
 	if err != nil {
-		return &TankSubscriber{}, err
+		return err
 	}
 	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
-		return &TankSubscriber{}, fmt.Errorf("cannot create new tcp connection")
+		return fmt.Errorf("cannot create new tcp connection")
+	}
+
+	if bufsize == 0 {
+		bufsize = DefaultBufSize
 	}
 
 	t := TankSubscriber{
 		con:         tcpConn,
 		rlock:       &sync.Mutex{},
-		readBuffer:  tbinary.NewReadBuffer(tcpConn, binary.LittleEndian, 1024*100),
+		readBuffer:  tbinary.NewReadBuffer(tcpConn, binary.LittleEndian, bufsize),
 		writeBuffer: tbinary.NewWriteBuffer(tcpConn, binary.LittleEndian),
 		wlock:       &sync.Mutex{},
 	}
 
-	return &t, nil
+	*s = t
+	return nil
 }
 
 // Reset resets TankSubscriber's underlying connection and read/write buffers.
@@ -211,3 +224,8 @@ func (s *TankSubscriber) sendSubscribeRequest(w Writable) (message.BasicHeader, 
 
 	return header, nil
 }
+
+const (
+	DefaultConTimeout = time.Millisecond * 500
+	DefaultBufSize    = 1024 * 100
+)
