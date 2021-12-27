@@ -1,18 +1,18 @@
 package message
 
-// MessageType alias.
-type MessageType uint8
+// Type alias.
+type Type uint8
 
 // Message types id.
 const (
-	TypeUnknown            MessageType = 0
-	TypeConsume            MessageType = 2
-	TypeProduce            MessageType = 1
-	TypeProduce5           MessageType = 5
-	TypePing               MessageType = 3
-	TypeDiscoverPartitions MessageType = 6
-	TypeCreateTopic        MessageType = 7
-	TypeReloadConf         MessageType = 8
-	TypeConsumePeer        MessageType = 9
-	TypeStatus             MessageType = 10
+	TypeUnknown            Type = 0
+	TypeConsume            Type = 2
+	TypeProduce            Type = 1
+	TypeProduce5           Type = 5
+	TypePing               Type = 3
+	TypeDiscoverPartitions Type = 6
+	TypeCreateTopic        Type = 7
+	TypeReloadConf         Type = 8
+	TypeConsumePeer        Type = 9
+	TypeStatus             Type = 10
 )

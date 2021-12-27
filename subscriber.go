@@ -62,12 +62,16 @@ func (s *TankSubscriber) Connect(ctx context.Context, broker string, connectTime
 	if connectTimeout == 0 {
 		connectTimeout = DefaultConTimeout
 	}
+
 	d := net.Dialer{Timeout: connectTimeout}
 	conn, err := d.DialContext(ctx, "tcp", tcpAddr.String())
+
 	if err != nil {
 		return err
 	}
+
 	tcpConn, ok := conn.(*net.TCPConn)
+
 	if !ok {
 		return fmt.Errorf("cannot create new tcp connection")
 	}
@@ -85,6 +89,7 @@ func (s *TankSubscriber) Connect(ctx context.Context, broker string, connectTime
 	}
 
 	*s = t
+
 	return nil
 }
 
@@ -93,27 +98,36 @@ func (s *TankSubscriber) Connect(ctx context.Context, broker string, connectTime
 func (s *TankSubscriber) Reset(ctx context.Context) error {
 	d := net.Dialer{Timeout: time.Millisecond * 500}
 	conn, err := d.DialContext(ctx, "tcp", s.con.RemoteAddr().String())
+
 	if err != nil {
 		return err
 	}
+
 	tcpConn, ok := conn.(*net.TCPConn)
+
 	if !ok {
 		return fmt.Errorf("cannot create new tcp connection")
 	}
-	s.con.Close()
+
+	if err = s.con.Close(); err != nil {
+		return err
+	}
+
 	s.con = tcpConn
 	s.readBuffer.Reset(s.con)
 	s.writeBuffer.Reset(s.con)
+
 	return nil
 }
 
 // Subscribe to TANK server based on the provided consume request. It returns a message log channel of maxConcurrentReads size and an error channel.
 func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error) {
-
 	errChan := make(chan error, 1)
 	bh, err := s.sendSubscribeRequest(r)
+
 	if err != nil {
 		errChan <- err
+
 		return nil, errChan
 	}
 
@@ -131,6 +145,7 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 
 	// consume from stream in the background.
 	done := make(chan bool)
+
 	go func() {
 		errChan <- m.Consume(&s.readBuffer, bh.PayloadSize, msgChan)
 		done <- true
@@ -175,6 +190,7 @@ func (s *TankSubscriber) Close() error {
 	if s.con != nil {
 		return s.con.Close()
 	}
+
 	return nil
 }
 

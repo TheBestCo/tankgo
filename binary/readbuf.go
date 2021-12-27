@@ -126,6 +126,7 @@ func (rb *ReadBuffer) ReadVarString(size uint64) (string, error) {
 func (rb *ReadBuffer) ReadMessage(size int64) ([]byte, error) {
 	buf := make([]byte, size)
 	_, err := io.ReadFull(&rb.reader, buf)
+
 	return buf, err
 }
 
@@ -164,6 +165,7 @@ func (rb *ReadBuffer) SnappyReader() *snappy.Reader {
 func (rb *ReadBuffer) ReadVarUInt(v *uint64) (remain int, err error) {
 	decoded, err := binary.ReadUvarint(&rb.reader)
 	*v = decoded
+
 	if err != nil {
 		return 0, err
 	}

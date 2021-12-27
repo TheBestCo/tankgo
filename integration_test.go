@@ -50,7 +50,9 @@ func TestIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	tankC, err := setupTankContainer(ctx)
+
 	assert.NoError(t, err)
+
 	defer tankC.Terminate(ctx)
 
 	// Send message
@@ -85,25 +87,31 @@ func TestIntegration(t *testing.T) {
 	defer s.Close()
 
 	err = s.Ping()
+
 	assert.NoError(t, err)
 
 	highWaterMarkMap, err := s.GetTopicsHighWaterMark(&req)
 
 	assert.NoError(t, err)
+
 	assert.Equal(t, uint64(3), highWaterMarkMap["test_topic"])
 
 	err = s.Reset(ctx)
+
 	assert.NoError(t, err)
 
 	err = s.Ping()
+
 	assert.NoError(t, err)
 
 	messages, errChan := s.Subscribe(&req, 10)
+
 	assert.NoError(t, err)
 
 	msgList := make([]message.MessageLog, 0, 10)
 
 	done := make(chan bool, 1)
+
 	go func() {
 		for m := range messages {
 			msgList = append(msgList, m)

@@ -2,21 +2,21 @@ package message
 
 import "fmt"
 
-type ErrMessage struct {
+type MessageError struct {
 	inner error
 	msg   string
 }
 
 // NewMessage constructs a message error.
-func NewMessageError(inner error, msg string) *ErrMessage {
-	return &ErrMessage{
+func NewMessageError(inner error, msg string) *MessageError {
+	return &MessageError{
 		inner: inner,
 		msg:   msg,
 	}
 }
 
 // Error function.
-func (r *ErrMessage) Error() string {
+func (r *MessageError) Error() string {
 	if r.inner != nil {
 		return fmt.Sprintf("tankgo message error: %s: %s", r.msg, r.inner.Error())
 	}
@@ -25,8 +25,11 @@ func (r *ErrMessage) Error() string {
 }
 
 // Unwrap function.
-func (r *ErrMessage) Unwrap() error {
+func (r *MessageError) Unwrap() error {
 	return r.inner
 }
 
-var EmptyResponse error
+var (
+	ErrHighWaterMarkExceeded error
+	ErrEmptyResponse         error
+)

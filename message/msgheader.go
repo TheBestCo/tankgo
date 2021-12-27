@@ -9,7 +9,7 @@ const SizeOfBasicHeader = binary.SizeOfUint8Bytes + binary.SizeOfUint32Bytes
 
 // BasicHeader struct.
 type BasicHeader struct {
-	MessageType MessageType
+	MessageType Type
 	PayloadSize uint32
 }
 
@@ -31,7 +31,7 @@ func ParseBasicHeader(prs binary.Parser, b []byte) (BasicHeader, error) {
 	}
 
 	return BasicHeader{
-		MessageType: MessageType(prs.ParseUint8(b[:binary.SizeOfUint8Bytes])),
+		MessageType: Type(prs.ParseUint8(b[:binary.SizeOfUint8Bytes])),
 		PayloadSize: prs.ParseUint32(b[binary.SizeOfUint8Bytes:]),
 	}, nil
 }
@@ -59,7 +59,7 @@ func (b *BasicHeader) ReadHeader(rb *binary.ReadBuffer, payloadSize uint32) erro
 		return err
 	}
 
-	b.MessageType = MessageType(mt)
+	b.MessageType = Type(mt)
 	b.PayloadSize = payload
 
 	return nil
