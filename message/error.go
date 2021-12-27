@@ -1,6 +1,9 @@
 package message
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type MessageError struct {
 	inner error
@@ -30,6 +33,6 @@ func (r *MessageError) Unwrap() error {
 }
 
 var (
-	ErrHighWaterMarkExceeded error
-	ErrEmptyResponse         error
+	ErrHighWaterMarkExceeded = errors.New("high water mark exceeded")
+	ErrEmptyResponse         = errors.New("empty tank response")
 )

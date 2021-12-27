@@ -738,7 +738,7 @@ func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[s
 	}
 
 	if rb.Remaining() == 0 {
-		return NewMessageError(ErrEmptyResponse, "empty tank response")
+		return NewMessageError(ErrEmptyResponse, "empty tank response while reading from topic")
 	}
 
 	if err = t.readErrorOrFlags(rb); err != nil {
