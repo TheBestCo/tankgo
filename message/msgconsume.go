@@ -169,7 +169,7 @@ type ConsumeResponse struct {
 	TopicPartitionBaseSeq map[string]uint64
 }
 
-func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, msgLog chan<- MessageLog) error {
+func (fr *ConsumeResponse) Consume(rb *binary.ReadBuffer, payloadSize uint32, msgLog chan<- Log) error {
 	var hl uint32 // header length:u32
 	if err := rb.ReadUint32(&hl); err != nil {
 		return err
@@ -244,7 +244,7 @@ type Message struct {
 	Type Type
 }
 
-type MessageLog struct {
+type Log struct {
 	CreatedAt uint64
 	SeqNumber uint64
 	Key       []byte
@@ -619,7 +619,7 @@ func (t *Topic) NextBundle(rb *binary.ReadBuffer) bool {
 	return t.Partition.ConsumedFromChunk < uint64(t.Partition.ChuckLength)
 }
 
-func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCount int, firstMsgSeqNumber, lastMsgSeqNumber, requestedSeqNum uint64, logChan chan<- MessageLog) error {
+func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCount int, firstMsgSeqNumber, lastMsgSeqNumber, requestedSeqNum uint64, logChan chan<- Log) error {
 	var ts uint64
 
 	for i := 0; i < messageCount; i++ {
@@ -666,7 +666,7 @@ func (t *Topic) readMessages(rb *binary.ReadBuffer, sparseBundle bool, messageCo
 
 		// send message to channel. It will block if consumers are reading slower than the client's send rate.
 		if messageSequenceNum >= requestedSeqNum {
-			logChan <- MessageLog{Payload: messagePayload, SeqNumber: messageSequenceNum, CreatedAt: ts, Key: key}
+			logChan <- Log{Payload: messagePayload, SeqNumber: messageSequenceNum, CreatedAt: ts, Key: key}
 		}
 
 		t.LogBaseSeqNum++
@@ -724,7 +724,7 @@ func (t *Topic) getHighWaterMark(rb *binary.ReadBuffer) (uint64, error) {
 	return t.Partition.HighWaterMark, nil
 }
 
-func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[string]uint64, payloadSize uint32, logChan chan<- MessageLog) error {
+func (t *Topic) readFromTopic(rb *binary.ReadBuffer, topicPartitionBaseSeq map[string]uint64, payloadSize uint32, logChan chan<- Log) error {
 	var (
 		err error
 	)

@@ -108,7 +108,7 @@ func TestIntegration(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	msgList := make([]message.MessageLog, 0, 10)
+	msgList := make([]message.Log, 0, 10)
 
 	done := make(chan bool, 1)
 

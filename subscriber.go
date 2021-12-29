@@ -15,7 +15,7 @@ import (
 
 type Subscriber interface {
 	Connect(ctx context.Context, broker string) error
-	Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error)
+	Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.Log, <-chan error)
 	Reset(ctx context.Context) error
 	GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error)
 	Ping() error
@@ -121,7 +121,7 @@ func (s *TankSubscriber) Reset(ctx context.Context) error {
 }
 
 // Subscribe to TANK server based on the provided consume request. It returns a message log channel of maxConcurrentReads size and an error channel.
-func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.MessageLog, <-chan error) {
+func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.Log, <-chan error) {
 	errChan := make(chan error, 1)
 	bh, err := s.sendSubscribeRequest(r)
 
@@ -141,7 +141,7 @@ func (s *TankSubscriber) Subscribe(r *message.ConsumeRequest, maxConcurrentReads
 
 	m := message.ConsumeResponse{TopicPartitionBaseSeq: topicPartitionBaseSeq}
 
-	msgChan := make(chan message.MessageLog, maxConcurrentReads)
+	msgChan := make(chan message.Log, maxConcurrentReads)
 
 	// consume from stream in the background.
 	done := make(chan bool)
