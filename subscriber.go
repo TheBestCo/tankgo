@@ -14,7 +14,7 @@ import (
 )
 
 type Subscriber interface {
-	Connect(ctx context.Context, broker string) error
+	Connect(ctx context.Context, broker string, connectTimeout time.Duration, bufsize int) error
 	Subscribe(r *message.ConsumeRequest, maxConcurrentReads int) (<-chan message.Log, <-chan error)
 	Reset(ctx context.Context) error
 	GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[string]uint64, error)
@@ -186,6 +186,7 @@ func (s *TankSubscriber) GetTopicsHighWaterMark(r *message.ConsumeRequest) (map[
 	return seqNumbersMap, nil
 }
 
+// Close the underlying tcp connection with Tank.
 func (s *TankSubscriber) Close() error {
 	if s.con != nil {
 		return s.con.Close()
