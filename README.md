@@ -1,5 +1,10 @@
 # TankGo
 
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/TheBestCo/tankgo/CI)](https://github.com/TheBestCo/tankgo/actions)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheBestCo/tankgo)](https://github.com/TheBestCo/tankgo/releases)
+[![GitHub](https://img.shields.io/github/license/TheBestCo/tankgo)](https://github.com/TheBestCo/tankgo/blob/main/LICENCE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/TheBestCo/tankgo.svg)](https://pkg.go.dev/github.com/TheBestCo/tankgo)
+
 ![image](https://user-images.githubusercontent.com/684680/151995604-13e90fae-ea97-46c1-86c3-60a47e5cafc9.png)
 
 ## Overview
