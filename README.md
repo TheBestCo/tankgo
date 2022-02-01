@@ -1,5 +1,7 @@
 # TankGo
 
+![image](https://user-images.githubusercontent.com/684680/151995604-13e90fae-ea97-46c1-86c3-60a47e5cafc9.png)
+
 ## Overview
 TankGo is a stream processing library client for [Tank](https://github.com/phaistos-networks/TANK) written in Go. The project is still under development and until the latest [release](https://github.com/TheBestCo/tankgo/releases/tag/v0.1.8) some features like publishing messages are still missing. Currently only consuming from Tank server is supported. You can find more details regarding a high overview of the Tank protocol [here](https://github.com/phaistos-networks/TANK/blob/master/tank_protocol.md).
 Also for more details regarding the Tank encoding scheme, which is the same that TankGo client follows refer to this [document](https://github.com/phaistos-networks/TANK/blob/master/tank_encoding.md).
